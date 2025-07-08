@@ -4,6 +4,7 @@
  */
 import CursorSVG from "@/public/assets/CursorSVG";
 import React from "react";
+import CursorChat from "./CursorChat";
 //  Định nghĩa kiểu dữ liệu cho props
 //  color: màu sắc con trỏ, x/y: tọa độ, message: tin nhắn chat (nếu có)
 type Props = {
@@ -14,7 +15,7 @@ type Props = {
 };
 
 // Cursor = ({...}: Props) Function component dùng destructuring và kiểm tra type
-const Cursor = ({ color, x , y, message }: Props) => {
+const Cursor = ({ color, x, y, message }: Props) => {
   return (
     <div
       className="pointer-events-none absolute top-0 left-0"
@@ -23,8 +24,20 @@ const Cursor = ({ color, x , y, message }: Props) => {
       style={{ transform: `translateX(${x}px) translateY(${y}px)` }}
     >
       {/* Hiển thị hình con trỏ, có thể truyền màu sắc nếu muốn */}
-      <CursorSVG color=""/>
-      {/* Message */}
+      <CursorSVG color={color} />
+
+      {/* MESSAGE */}
+      {message && (
+        <div
+          className="absolute left-2 top-5 rounded-3xl px-4 py-2"
+          style={{
+            backgroundColor: color,
+            borderRadius: 20,
+          }}
+        >
+          <p className="whitespace-nowrap text-sm leading-relaxed text-white">{message}</p>
+        </div>
+      )}
     </div>
   );
 };
