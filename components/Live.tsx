@@ -1,49 +1,74 @@
 "use client";
-// Component chính quản lý tính năng live collaboration (Cộng tác thời gian thực)
+// Component quản lý tính năng live collaboration (cộng tác thời gian thực)
 // Sử dụng Liveblocks để đồng bộ trạng thái con trỏ giữa nhiều người dùng
 import { useCallback, useEffect, useState } from "react";
 import LiveCursor from "./cursor/LiveCursor";
 import { useMyPresence, useOthers } from "@liveblocks/react";
-import { CursorMode } from "@/types/type";
+import { CursorMode, CursorState } from "@/types/type";
 import CursorChat from "./cursor/CursorChat";
+import ReactionSelector from "./reaction/ReactButton";
 
 const Live = () => {
-  // Lấy danh sách tất cả người dùng khác đang online trong cùng một room (phòng làm việc)
-  const others = useOthers(); // others: danh sách user khác (không bao gồm mình)
+  // Lấy danh sách user khác (không bao gồm mình)
+  const others = useOthers();
   // Lấy giá trị cursor (tọa độ con trỏ của mình) và hàm updateMyPresence để cập nhật presence của chính mình
-
-  // useMyPresence trả về [state, setState] cho presence của user hiện tại
   const [{ cursor }, updateMyPresence] = useMyPresence() as any;
   // State quản lý trạng thái hiển thị của con trỏ (ẩn/hiện, v.v.)
-  const [cursorState, setCursorState] = useState({
+  const [cursorState, setCursorState] = useState<CursorState>({
     mode: CursorMode.Hidden,
   });
-  // Hàm handlePointerMove sẽ xử lý sự kiện di chuyển chuột trên vùng canvas/ Khi chuột di chuyển, cập nhật vị trí con trỏ của mình lên server (Liveblocks)
+
+  // State quản lý danh sách các phản ứng (reaction)
+  // (Hiện tại chưa dùng, có thể dùng cho các hiệu ứng reaction sau này)
+  const [reaction, setReaction] = useState<any[]>([]); // Sửa Reaction thành any để tránh lỗi
+
+  // Xử lý sự kiện di chuyển chuột trên vùng canvas
   const handlePointerMove = useCallback((event: React.PointerEvent) => {
     event.preventDefault();
-    // Tính toán vị trí con trỏ tương đối với phần tử hiện tại
-    const x = event.clientX - event.currentTarget.getBoundingClientRect().x;
-    const y = event.clientY - event.currentTarget.getBoundingClientRect().y;
-    // Cập nhật presence với vị trí mới của con trỏ
-    updateMyPresence({ cursor: { x, y } });
+    // Nếu không ở chế độ ReactionSelector thì cập nhật vị trí con trỏ
+    if (cursor == null || cursorState.mode !== CursorMode.ReactionSelector) {
+      const x = event.clientX - event.currentTarget.getBoundingClientRect().x;
+      const y = event.clientY - event.currentTarget.getBoundingClientRect().y;
+      updateMyPresence({ cursor: { x, y } });
+    }
   }, []);
 
-  // Hàm này được gọi khi con trỏ chuột rời khỏi vùng canvas
-  // Xóa vị trí con trỏ và message (nếu có) khỏi presence
+  // Khi chuột rời khỏi vùng canvas: ẩn con trỏ và xóa message
   const handlePointerLeave = useCallback((event: React.PointerEvent) => {
-    setCursorState({ mode: CursorMode.Hidden }); // Ẩn con trỏ khi rời khỏi vùng canvas
-    updateMyPresence({ cursor: null, message: null }); // Xóa thông tin con trỏ và message khỏi presence
+    setCursorState({ mode: CursorMode.Hidden });
+    updateMyPresence({ cursor: null, message: null });
   }, []);
 
-  // Hàm này được gọi khi nhấn chuột xuống vùng canvas
-  // Cập nhật vị trí con trỏ tại thời điểm nhấn chuột
-  const handlePointerDown = useCallback((event: React.PointerEvent) => {
-    event.preventDefault();
-    const x = event.clientX - event.currentTarget.getBoundingClientRect().x;
-    const y = event.clientY - event.currentTarget.getBoundingClientRect().y;
-    updateMyPresence({ cursor: { x, y } });
-  }, []);
+  // Khi nhấn chuột xuống vùng canvas: cập nhật vị trí con trỏ
+  const handlePointerDown = useCallback(
+    (event: React.PointerEvent) => {
+      event.preventDefault();
+      const x = event.clientX - event.currentTarget.getBoundingClientRect().x;
+      const y = event.clientY - event.currentTarget.getBoundingClientRect().y;
+      updateMyPresence({ cursor: { x, y } });
+      // Nếu đang ở chế độ Reaction thì set isPressed
+      setCursorState((state: CursorState) =>
+        cursorState.mode === CursorMode.Reaction
+          ? { ...state, isPressed: true }
+          : state
+      );
+    },
+    [cursorState.mode, setCursorState]
+  );
 
+  // Khi nhả chuột: nếu ở chế độ Reaction thì set isPressed
+  const handlePointerUp = useCallback(
+    (event: React.PointerEvent) => {
+      setCursorState((state: CursorState) =>
+        cursorState.mode === CursorMode.Reaction
+          ? { ...state, isPressed: true }
+          : state
+      );
+    },
+    [cursorState.mode, setCursorState]
+  );
+
+  // Lắng nghe phím tắt: / để chat, Escape để ẩn, e để chọn reaction
   useEffect(() => {
     const onKeyUp = (e: KeyboardEvent) => {
       if (e.key === "/") {
@@ -55,23 +80,34 @@ const Live = () => {
       } else if (e.key === "Escape") {
         updateMyPresence({ message: "" });
         setCursorState({ mode: CursorMode.Hidden });
+      } else if (e.key === "e") {
+        setCursorState({
+          mode: CursorMode.ReactionSelector,
+        });
       }
     };
-
+    // Ngăn mặc định khi nhấn /
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "/") {
         e.preventDefault();
       }
     };
-
     window.addEventListener("keyup", onKeyUp);
     window.addEventListener("keydown", onKeyDown);
-
     return () => {
       window.addEventListener("keyup", onKeyUp);
       window.addEventListener("keydown", onKeyDown);
     };
   }, [updateMyPresence]);
+
+  // Hàm chọn reaction (khi chọn emoji)
+  const setReactions = useCallback((reaction: string) => {
+    setCursorState({
+      mode: CursorMode.Reaction,
+      reaction,
+      isPressed: false,
+    });
+  }, [])
 
   return (
     // Vùng canvas chính để theo dõi và hiển thị con trỏ của các user
@@ -79,22 +115,30 @@ const Live = () => {
       onPointerMove={handlePointerMove} // Theo dõi di chuyển chuột
       onPointerLeave={handlePointerLeave} // Khi chuột rời khỏi vùng
       onPointerDown={handlePointerDown} // Khi nhấn chuột xuống vùng
+      onPointerUp={handlePointerUp}
       className="h-[100vh] w-full flex items-center justify-center text-center "
     >
       {/* Tiêu đề ứng dụng */}
       <h1 className="text-2xl text-white">Liveblocks Figma Clone</h1>
 
+      {/* Hiển thị chat con trỏ nếu có vị trí con trỏ (của mình) */}
       {cursor && (
-        // Hiển thị chat con trỏ nếu có vị trí con trỏ (của mình)
         <CursorChat
           cursor={cursor}
-          cursorState={cursorState} // Truyền state hiển thị con trỏ
-          setCursorState={setCursorState} // Hàm cập nhật state con trỏ
-          updateMyPresence={updateMyPresence} // Hàm cập nhật presence lên server
+          cursorState={cursorState}
+          setCursorState={setCursorState}
+          updateMyPresence={updateMyPresence}
         />
       )}
 
-      {/* Truyền danh sách người dùng vào component LiveCursor để hiển thị con trỏ của họ */}
+      {/* Hiển thị bảng chọn reaction nếu ở chế độ ReactionSelector */}
+      {cursorState.mode === CursorMode.ReactionSelector && (
+        <ReactionSelector
+          setReaction={setReactions}
+        />
+      )}
+
+      {/* Hiển thị con trỏ của các user khác */}
       <LiveCursor others={others} />
     </div>
   );
