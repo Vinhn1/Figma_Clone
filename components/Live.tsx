@@ -7,6 +7,8 @@ import { useMyPresence, useOthers } from "@liveblocks/react";
 import { CursorMode, CursorState } from "@/types/type";
 import CursorChat from "./cursor/CursorChat";
 import ReactionSelector from "./reaction/ReactButton";
+import FlyingReaction from "./reaction/FlyingReaction";
+import useInterval from "@/hooks/useInterval";
 
 const Live = () => {
   // Lấy danh sách user khác (không bao gồm mình)
@@ -20,7 +22,18 @@ const Live = () => {
 
   // State quản lý danh sách các phản ứng (reaction)
   // (Hiện tại chưa dùng, có thể dùng cho các hiệu ứng reaction sau này)
-  const [reaction, setReaction] = useState<any[]>([]); // Sửa Reaction thành any để tránh lỗi
+  const [reaction, setReaction] = useState<any[]>([]); 
+
+  // Định kỳ (mỗi 100ms), nếu đang ở chế độ Reaction và giữ chuột, thêm một reaction mới vào mảng reaction tại vị trí con trỏ
+  useInterval(() => {
+    if(cursorState.mode === CursorMode.Reaction && cursorState.isPressed && cursor){
+      setReaction((reactions) => reactions.concat([{
+        point: {x: cursor.x, y: cursor.y},
+        value: cursorState.reaction,
+        timestamp: Date.now(),
+      }]))
+    }
+  }, 100)
 
   // Xử lý sự kiện di chuyển chuột trên vùng canvas
   const handlePointerMove = useCallback((event: React.PointerEvent) => {
@@ -120,6 +133,17 @@ const Live = () => {
     >
       {/* Tiêu đề ứng dụng */}
       <h1 className="text-2xl text-white">Liveblocks Figma Clone</h1>
+
+      {/* Hiển thị hiệu ứng reaction (emoji bay lên) tại vị trí người dùng tương tác */}
+      {reaction.map((r) => (
+        <FlyingReaction 
+          key={r.timestamp.toString()}
+          x={r.point.x}
+          y={r.point.y}
+          timestamp={r.timestamp}
+          value={r.value}
+        />
+      ))}
 
       {/* Hiển thị chat con trỏ nếu có vị trí con trỏ (của mình) */}
       {cursor && (
