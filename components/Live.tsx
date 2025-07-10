@@ -32,6 +32,11 @@ const Live = () => {
   // Hook để gửi sự kiện reaction cho các user khác
   const broadcast = useBroadcastEvent();
 
+  // Xóa đi các hiệu ứng icon trong một khoảng thời gian
+  useInterval(() => {
+    setReaction((reaction) => reaction.filter((r) => r.timestamp > Date.now() - 4000))
+  }, 1000)
+
   // Định kỳ (mỗi 100ms), nếu đang ở chế độ Reaction và giữ chuột, thêm một reaction mới vào mảng reaction tại vị trí con trỏ
   useInterval(() => {
     if (
