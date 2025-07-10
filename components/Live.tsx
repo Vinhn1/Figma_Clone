@@ -3,8 +3,13 @@
 // Sử dụng Liveblocks để đồng bộ trạng thái con trỏ giữa nhiều người dùng
 import { useCallback, useEffect, useState } from "react";
 import LiveCursor from "./cursor/LiveCursor";
-import { useMyPresence, useOthers } from "@liveblocks/react";
-import { CursorMode, CursorState } from "@/types/type";
+import {
+  useBroadcastEvent,
+  useEventListener,
+  useMyPresence,
+  useOthers,
+} from "@liveblocks/react";
+import { CursorMode, CursorState, ReactionEvent } from "@/types/type";
 import CursorChat from "./cursor/CursorChat";
 import ReactionSelector from "./reaction/ReactButton";
 import FlyingReaction from "./reaction/FlyingReaction";
@@ -22,18 +27,50 @@ const Live = () => {
 
   // State quản lý danh sách các phản ứng (reaction)
   // (Hiện tại chưa dùng, có thể dùng cho các hiệu ứng reaction sau này)
-  const [reaction, setReaction] = useState<any[]>([]); 
+  const [reaction, setReaction] = useState<any[]>([]);
+
+  // Hook để gửi sự kiện reaction cho các user khác
+  const broadcast = useBroadcastEvent();
 
   // Định kỳ (mỗi 100ms), nếu đang ở chế độ Reaction và giữ chuột, thêm một reaction mới vào mảng reaction tại vị trí con trỏ
   useInterval(() => {
-    if(cursorState.mode === CursorMode.Reaction && cursorState.isPressed && cursor){
-      setReaction((reactions) => reactions.concat([{
-        point: {x: cursor.x, y: cursor.y},
+    if (
+      cursorState.mode === CursorMode.Reaction &&
+      cursorState.isPressed &&
+      cursor
+    ) {
+      setReaction((reactions) =>
+        reactions.concat([
+          {
+            point: { x: cursor.x, y: cursor.y },
+            value: cursorState.reaction,
+            timestamp: Date.now(),
+          },
+        ])
+      );
+
+      // Gửi sự kiện reaction cho các user khác
+      broadcast({
+        x: cursor.x,
+        y: cursor.y,
         value: cursorState.reaction,
-        timestamp: Date.now(),
-      }]))
+      });
     }
-  }, 100)
+  }, 100);
+
+  // Lắng nghe sự kiện reaction từ các user khác
+  useEventListener((eventData) => {
+    const event = eventData.event as ReactionEvent;
+    setReaction((reactions) =>
+      reactions.concat([
+        {
+          point: { x: event.x, y: event.y },
+          value: event.value,
+          timestamp: Date.now(),
+        },
+      ])
+    );
+  });
 
   // Xử lý sự kiện di chuyển chuột trên vùng canvas
   const handlePointerMove = useCallback((event: React.PointerEvent) => {
@@ -120,7 +157,7 @@ const Live = () => {
       reaction,
       isPressed: false,
     });
-  }, [])
+  }, []);
 
   return (
     // Vùng canvas chính để theo dõi và hiển thị con trỏ của các user
@@ -136,7 +173,7 @@ const Live = () => {
 
       {/* Hiển thị hiệu ứng reaction (emoji bay lên) tại vị trí người dùng tương tác */}
       {reaction.map((r) => (
-        <FlyingReaction 
+        <FlyingReaction
           key={r.timestamp.toString()}
           x={r.point.x}
           y={r.point.y}
@@ -157,9 +194,7 @@ const Live = () => {
 
       {/* Hiển thị bảng chọn reaction nếu ở chế độ ReactionSelector */}
       {cursorState.mode === CursorMode.ReactionSelector && (
-        <ReactionSelector
-          setReaction={setReactions}
-        />
+        <ReactionSelector setReaction={setReactions} />
       )}
 
       {/* Hiển thị con trỏ của các user khác */}
